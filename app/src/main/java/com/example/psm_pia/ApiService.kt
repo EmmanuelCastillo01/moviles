@@ -1,20 +1,24 @@
 package com.example.psm_pia
 
-import retrofit2.http.Field
-import retrofit2.http.FormUrlEncoded
-import retrofit2.http.POST
-import retrofit2.Response
 import okhttp3.MultipartBody
+import retrofit2.Response
 import retrofit2.http.*
 
 interface ApiService {
-    @FormUrlEncoded
+    @Multipart
     @POST("alta_usuario.php")
     suspend fun registerUser(
+        @Part("gmail") gmail: String,
+        @Part("nombre_usuario") nombreUsuario: String,
+        @Part("contrasena") contrasena: String,
+        @Part("telefono") telefono: String,
+        @Part("imagen") imagen: String?
+    ): Response<ApiResponse>
+
+    @FormUrlEncoded
+    @POST("login_usuario.php")
+    suspend fun loginUser(
         @Field("gmail") gmail: String,
-        @Field("nombre_usuario") nombreUsuario: String,
-        @Field("contraseña") contraseña: String,
-        @Field("telefono") telefono: String,
-        @Field("imagen") imagen: String
+        @Field("contraseña") contraseña: String
     ): Response<ApiResponse>
 }

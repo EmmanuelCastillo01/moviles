@@ -30,4 +30,10 @@ interface ApiService {
         @Field("nombre_usuario") nombreUsuario: String,
         @Field("telefono") telefono: String
     ): Response<ApiResponse>
+
+    @FormUrlEncoded
+    @POST("eliminar_usuario.php")
+    suspend fun deleteUser(
+        @Field("gmail") gmail: String
+    ): Response<ApiResponse>
 }

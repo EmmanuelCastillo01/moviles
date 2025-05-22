@@ -495,9 +495,12 @@ fun ProfileScreen(
     var updatedUsername by remember { mutableStateOf(username) }
     var updatedPhone by remember { mutableStateOf(phone) }
     var showEditDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) } // Nuevo estado para el diálogo de eliminación
     var gmailError by remember { mutableStateOf<String?>(null) }
     var usernameError by remember { mutableStateOf<String?>(null) }
     var phoneError by remember { mutableStateOf<String?>(null) }
+    var passwordConfirmation by remember { mutableStateOf("") }
+    var passwordError by remember { mutableStateOf<String?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -580,7 +583,7 @@ fun ProfileScreen(
                             coroutineScope.launch {
                                 try {
                                     val response = RetrofitClient.apiService.updateUser(
-                                        originalGmail = gmail, // Usamos el gmail original para identificar al usuario
+                                        originalGmail = gmail,
                                         newGmail = updatedGmail,
                                         nombreUsuario = updatedUsername,
                                         telefono = updatedPhone
@@ -590,9 +593,7 @@ fun ProfileScreen(
                                             message = "Perfil actualizado correctamente. Usa tu nuevo Gmail ($updatedGmail) para iniciar sesión la próxima vez.",
                                             duration = SnackbarDuration.Long
                                         )
-                                        // Actualizar los datos en la pantalla
                                         showEditDialog = false
-                                        // Navegar de nuevo para actualizar los argumentos
                                         val encodedGmail = java.net.URLEncoder.encode(updatedGmail, "UTF-8")
                                         val encodedUsername = java.net.URLEncoder.encode(updatedUsername, "UTF-8")
                                         val encodedPhone = java.net.URLEncoder.encode(updatedPhone, "UTF-8")
@@ -600,7 +601,6 @@ fun ProfileScreen(
                                             popUpTo(navController.graph.startDestinationId)
                                             launchSingleTop = true
                                         }
-                                        // También actualizar DashboardScreen
                                         navController.navigate("dashboard?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone") {
                                             popUpTo("dashboard") { inclusive = true }
                                         }
@@ -625,6 +625,75 @@ fun ProfileScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo para confirmar eliminación
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Eliminar Cuenta") },
+            text = {
+                Column {
+                    Text("¿Estás seguro de que deseas eliminar tu cuenta? Esta acción no se puede deshacer.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = passwordConfirmation,
+                        onValueChange = { passwordConfirmation = it },
+                        label = { Text("Ingresa tu contraseña para confirmar") },
+                        modifier = Modifier.fillMaxWidth(),
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        isError = passwordError != null,
+                        supportingText = { passwordError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Aquí podrías agregar una solicitud al servidor para verificar la contraseña antes de eliminar
+                        // Por ahora, solo verificamos que no esté vacía
+                        passwordError = if (passwordConfirmation.isEmpty()) "Ingresa tu contraseña" else null
+                        if (passwordError == null) {
+                            coroutineScope.launch {
+                                try {
+                                    val response = RetrofitClient.apiService.deleteUser(gmail = gmail)
+                                    if (response.isSuccessful && response.body()?.success == true) {
+                                        snackbarHostState.showSnackbar(
+                                            message = "Cuenta eliminada correctamente",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                        showDeleteDialog = false
+                                        navController.navigate("login") {
+                                            popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                                            launchSingleTop = true
+                                        }
+                                    } else {
+                                        snackbarHostState.showSnackbar(
+                                            message = response.body()?.message ?: "Error al eliminar la cuenta",
+                                            duration = SnackbarDuration.Long
+                                        )
+                                    }
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Error de red: ${e.message}",
+                                        duration = SnackbarDuration.Long
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Confirmar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
                     Text("Cancelar")
                 }
             }
@@ -714,9 +783,21 @@ fun ProfileScreen(
             ) {
                 Text("Editar Perfil")
             }
+
+            // Botón para eliminar cuenta
+            Button(
+                onClick = { showDeleteDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Eliminar Cuenta")
+            }
         }
     }
 }
+
 
 
 @Preview(showBackground = true)

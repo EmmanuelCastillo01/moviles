@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
 @Composable
 fun MyApp() {
     val navController = rememberNavController()
@@ -66,11 +67,24 @@ fun MyApp() {
                 navArgument("phone") { type = NavType.StringType; defaultValue = "" }
             )
         ) { backStackEntry ->
+            val gmail = backStackEntry.arguments?.getString("gmail") ?: ""
+            val username = backStackEntry.arguments?.getString("username") ?: ""
+            val phone = backStackEntry.arguments?.getString("phone") ?: ""
+
+            if (gmail.isEmpty() || username.isEmpty() || phone.isEmpty()) {
+                LaunchedEffect(Unit) {
+                    navController.navigate("login") {
+                        popUpTo(navController.graph.startDestinationId)
+                        launchSingleTop = true
+                    }
+                }
+            }
+
             ProfileScreen(
                 navController,
-                gmail = backStackEntry.arguments?.getString("gmail") ?: "",
-                username = backStackEntry.arguments?.getString("username") ?: "",
-                phone = backStackEntry.arguments?.getString("phone") ?: ""
+                gmail = gmail,
+                username = username,
+                phone = phone
             )
         }
         composable("add_recipe") { AddRecipeScreen(navController) }
@@ -477,60 +491,233 @@ fun ProfileScreen(
     username: String,
     phone: String
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Kitchen Lab",
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier
-                .padding(vertical = 16.dp)
-                .align(Alignment.CenterHorizontally)
-        )
+    var updatedGmail by remember { mutableStateOf(gmail) }
+    var updatedUsername by remember { mutableStateOf(username) }
+    var updatedPhone by remember { mutableStateOf(phone) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var gmailError by remember { mutableStateOf<String?>(null) }
+    var usernameError by remember { mutableStateOf<String?>(null) }
+    var phoneError by remember { mutableStateOf<String?>(null) }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Button(onClick = { navController.navigate("login") }) {
-                Text("Salir")
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    fun isValidGmail(gmail: String): Boolean {
+        val gmailRegex = Regex("^[a-zA-Z0-9._%+-]+@gmail\\.com$")
+        return gmailRegex.matches(gmail)
+    }
+
+    fun isValidPhone(phone: String): Boolean {
+        return phone.matches(Regex("^\\d{10}$"))
+    }
+
+    // Diálogo para editar perfil
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Editar Perfil") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = updatedGmail,
+                        onValueChange = {
+                            updatedGmail = it
+                            gmailError = if (it.isEmpty()) "El campo es obligatorio" else if (!isValidGmail(it)) "Debe terminar en @gmail.com" else null
+                        },
+                        label = { Text("Gmail") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        isError = gmailError != null,
+                        supportingText = { gmailError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+                    )
+
+                    OutlinedTextField(
+                        value = updatedUsername,
+                        onValueChange = {
+                            updatedUsername = it
+                            usernameError = if (it.isEmpty()) "El campo es obligatorio" else null
+                        },
+                        label = { Text("Nombre de Usuario") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        isError = usernameError != null,
+                        supportingText = { usernameError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+                    )
+
+                    OutlinedTextField(
+                        value = updatedPhone,
+                        onValueChange = {
+                            if (it.all { char -> char.isDigit() } && it.length <= 10) {
+                                updatedPhone = it
+                                phoneError = if (it.isEmpty()) "El campo es obligatorio" else if (!isValidPhone(it)) {
+                                    "Debe tener exactamente 10 dígitos numéricos"
+                                } else null
+                            }
+                        },
+                        label = { Text("Teléfono") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        isError = phoneError != null,
+                        supportingText = { phoneError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        gmailError = if (updatedGmail.isEmpty()) "El campo es obligatorio" else if (!isValidGmail(updatedGmail)) "Debe terminar en @gmail.com" else null
+                        usernameError = if (updatedUsername.isEmpty()) "El campo es obligatorio" else null
+                        phoneError = if (updatedPhone.isEmpty()) "El campo es obligatorio" else if (!isValidPhone(updatedPhone)) {
+                            "Debe tener exactamente 10 dígitos numéricos"
+                        } else null
+
+                        if (gmailError == null && usernameError == null && phoneError == null) {
+                            coroutineScope.launch {
+                                try {
+                                    val response = RetrofitClient.apiService.updateUser(
+                                        originalGmail = gmail, // Usamos el gmail original para identificar al usuario
+                                        newGmail = updatedGmail,
+                                        nombreUsuario = updatedUsername,
+                                        telefono = updatedPhone
+                                    )
+                                    if (response.isSuccessful && response.body()?.success == true) {
+                                        snackbarHostState.showSnackbar(
+                                            message = "Perfil actualizado correctamente. Usa tu nuevo Gmail ($updatedGmail) para iniciar sesión la próxima vez.",
+                                            duration = SnackbarDuration.Long
+                                        )
+                                        // Actualizar los datos en la pantalla
+                                        showEditDialog = false
+                                        // Navegar de nuevo para actualizar los argumentos
+                                        val encodedGmail = java.net.URLEncoder.encode(updatedGmail, "UTF-8")
+                                        val encodedUsername = java.net.URLEncoder.encode(updatedUsername, "UTF-8")
+                                        val encodedPhone = java.net.URLEncoder.encode(updatedPhone, "UTF-8")
+                                        navController.navigate("profile?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone") {
+                                            popUpTo(navController.graph.startDestinationId)
+                                            launchSingleTop = true
+                                        }
+                                        // También actualizar DashboardScreen
+                                        navController.navigate("dashboard?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone") {
+                                            popUpTo("dashboard") { inclusive = true }
+                                        }
+                                    } else {
+                                        snackbarHostState.showSnackbar(
+                                            message = response.body()?.message ?: "Error al actualizar",
+                                            duration = SnackbarDuration.Long
+                                        )
+                                    }
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Error de red: ${e.message}",
+                                        duration = SnackbarDuration.Long
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancelar")
+                }
             }
-            Button(onClick = { /* Lógica para favoritos */ }) {
-                Text("Favoritos")
-            }
-            Button(onClick = { navController.navigate("add_recipe") }) {
-                Text("Crear Receta")
+        )
+    }
+
+    Scaffold(
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(16.dp)
+            ) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (data.visuals.message.contains("Error")) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.primaryContainer
+                    },
+                    contentColor = if (data.visuals.message.contains("Error")) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    }
+                )
             }
         }
-
+    ) { paddingValues ->
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            horizontalAlignment = Alignment.Start
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Top,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = "Información del Usuario:", style = MaterialTheme.typography.titleMedium)
-            Text(text = "Correo Electrónico: $gmail", modifier = Modifier.padding(top = 8.dp))
-            Text(text = "Nombre de Usuario: $username", modifier = Modifier.padding(top = 8.dp))
-            Text(text = "Teléfono: $phone", modifier = Modifier.padding(top = 8.dp))
-        }
+            Text(
+                text = "Kitchen Lab",
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier
+                    .padding(vertical = 16.dp)
+                    .align(Alignment.CenterHorizontally)
+            )
 
-        Button(
-            onClick = { /* Lógica para editar perfil */ },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp)
-        ) {
-            Text("Editar Perfil")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Button(onClick = { navController.navigate("login") }) {
+                    Text("Salir")
+                }
+                Button(onClick = { /* Lógica para favoritos */ }) {
+                    Text("Favoritos")
+                }
+                Button(onClick = { navController.navigate("add_recipe") }) {
+                    Text("Crear Receta")
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(text = "Información del Usuario:", style = MaterialTheme.typography.titleMedium)
+                if (gmail.isNotEmpty() && username.isNotEmpty() && phone.isNotEmpty()) {
+                    Text(text = "Correo Electrónico: $gmail", modifier = Modifier.padding(top = 8.dp))
+                    Text(text = "Nombre de Usuario: $username", modifier = Modifier.padding(top = 8.dp))
+                    Text(text = "Teléfono: $phone", modifier = Modifier.padding(top = 8.dp))
+                } else {
+                    Text(
+                        text = "Error: No se pudieron cargar los datos del usuario.",
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+
+            Button(
+                onClick = { showEditDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+            ) {
+                Text("Editar Perfil")
+            }
         }
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable

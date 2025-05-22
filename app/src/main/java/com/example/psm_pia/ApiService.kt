@@ -21,4 +21,13 @@ interface ApiService {
         @Field("gmail") gmail: String,
         @Field("contraseña") contraseña: String
     ): Response<ApiResponse>
+
+    @FormUrlEncoded
+    @POST("editar_usuario.php")
+    suspend fun updateUser(
+        @Field("original_gmail") originalGmail: String,
+        @Field("new_gmail") newGmail: String,
+        @Field("nombre_usuario") nombreUsuario: String,
+        @Field("telefono") telefono: String
+    ): Response<ApiResponse>
 }

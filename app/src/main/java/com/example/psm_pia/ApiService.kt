@@ -36,4 +36,17 @@ interface ApiService {
     suspend fun deleteUser(
         @Field("gmail") gmail: String
     ): Response<ApiResponse>
+
+    @FormUrlEncoded
+    @POST("alta_receta.php")
+    suspend fun addRecipe(
+        @Field("id_usuario") idUsuario: Int,
+        @Field("nombre_receta") nombreReceta: String,
+        @Field("ingredientes") ingredientes: String,
+        @Field("instrucciones") instrucciones: String,
+        @Field("pais_origen") paisOrigen: String,
+        @Field("dificultad") dificultad: String,
+        @Field("tipo_platillo") tipoPlatillo: String,
+        @Field("cantidad_personas") cantidadPersonas: String
+    ): Response<ApiResponse>
 }

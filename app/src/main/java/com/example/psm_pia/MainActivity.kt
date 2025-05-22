@@ -23,6 +23,9 @@ import kotlinx.coroutines.launch
 import retrofit2.Response
 import com.example.psm_pia.ui.theme.PSM_PIATheme
 import java.net.URLEncoder
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,52 +48,91 @@ fun MyApp() {
         composable("login") { LoginScreen(navController) }
         composable("register") { RegisterScreen(navController) }
         composable(
-            route = "dashboard?gmail={gmail}&username={username}&phone={phone}",
+            route = "dashboard?gmail={gmail}&username={username}&phone={phone}&id={id}",
             arguments = listOf(
                 navArgument("gmail") { type = NavType.StringType; defaultValue = "" },
                 navArgument("username") { type = NavType.StringType; defaultValue = "" },
-                navArgument("phone") { type = NavType.StringType; defaultValue = "" }
-            )
-        ) { backStackEntry ->
-            DashboardScreen(
-                navController,
-                gmail = backStackEntry.arguments?.getString("gmail") ?: "",
-                username = backStackEntry.arguments?.getString("username") ?: "",
-                phone = backStackEntry.arguments?.getString("phone") ?: ""
-            )
-        }
-        composable(
-            route = "profile?gmail={gmail}&username={username}&phone={phone}",
-            arguments = listOf(
-                navArgument("gmail") { type = NavType.StringType; defaultValue = "" },
-                navArgument("username") { type = NavType.StringType; defaultValue = "" },
-                navArgument("phone") { type = NavType.StringType; defaultValue = "" }
+                navArgument("phone") { type = NavType.StringType; defaultValue = "" },
+                navArgument("id") { type = NavType.IntType; defaultValue = 0 }
             )
         ) { backStackEntry ->
             val gmail = backStackEntry.arguments?.getString("gmail") ?: ""
             val username = backStackEntry.arguments?.getString("username") ?: ""
             val phone = backStackEntry.arguments?.getString("phone") ?: ""
+            val userId = backStackEntry.arguments?.getInt("id") ?: 0
 
-            if (gmail.isEmpty() || username.isEmpty() || phone.isEmpty()) {
+            if (userId == 0 || gmail.isEmpty() || username.isEmpty() || phone.isEmpty()) {
                 LaunchedEffect(Unit) {
                     navController.navigate("login") {
-                        popUpTo(navController.graph.startDestinationId)
+                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
                         launchSingleTop = true
                     }
                 }
+            } else {
+                DashboardScreen(
+                    navController = navController,
+                    gmail = gmail,
+                    username = username,
+                    phone = phone,
+                    userId = userId
+                )
             }
-
-            ProfileScreen(
-                navController,
-                gmail = gmail,
-                username = username,
-                phone = phone
-            )
         }
-        composable("add_recipe") { AddRecipeScreen(navController) }
+        composable(
+            route = "profile?gmail={gmail}&username={username}&phone={phone}&id={id}",
+            arguments = listOf(
+                navArgument("gmail") { type = NavType.StringType; defaultValue = "" },
+                navArgument("username") { type = NavType.StringType; defaultValue = "" },
+                navArgument("phone") { type = NavType.StringType; defaultValue = "" },
+                navArgument("id") { type = NavType.IntType; defaultValue = 0 }
+            )
+        ) { backStackEntry ->
+            val gmail = backStackEntry.arguments?.getString("gmail") ?: ""
+            val username = backStackEntry.arguments?.getString("username") ?: ""
+            val phone = backStackEntry.arguments?.getString("phone") ?: ""
+            val userId = backStackEntry.arguments?.getInt("id") ?: 0
+
+            if (userId == 0 || gmail.isEmpty() || username.isEmpty() || phone.isEmpty()) {
+                LaunchedEffect(Unit) {
+                    navController.navigate("login") {
+                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            } else {
+                ProfileScreen(
+                    navController = navController,
+                    gmail = gmail,
+                    username = username,
+                    phone = phone,
+                    userId = userId
+                )
+            }
+        }
+        composable(
+            route = "add_recipe/{userId}",
+            arguments = listOf(
+                navArgument("userId") { type = NavType.IntType }
+            )
+        ) { backStackEntry ->
+            val userId = backStackEntry.arguments?.getInt("userId") ?: 0
+
+            if (userId == 0) {
+                LaunchedEffect(Unit) {
+                    navController.navigate("login") {
+                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            } else {
+                AddRecipeScreen(
+                    navController = navController,
+                    userId = userId
+                )
+            }
+        }
     }
 }
-
 
 @Composable
 fun LoginScreen(navController: NavHostController) {
@@ -166,8 +208,17 @@ fun LoginScreen(navController: NavHostController) {
                                     val encodedGmail = URLEncoder.encode(userData.gmail ?: gmail, "UTF-8")
                                     val encodedUsername = URLEncoder.encode(userData.nombre_usuario ?: "", "UTF-8")
                                     val encodedPhone = URLEncoder.encode(userData.telefono ?: "", "UTF-8")
+                                    val userId = userData.id ?: 0
+                                    if (userId == 0) {
+                                        snackbarHostState.showSnackbar(
+                                            message = "Error: No se recibió el ID del usuario",
+                                            duration = SnackbarDuration.Long
+                                        )
+                                        isLoading = false
+                                        return@launch
+                                    }
                                     navController.navigate(
-                                        "dashboard?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone"
+                                        "dashboard?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone&id=$userId"
                                     ) {
                                         popUpTo("login") { inclusive = true }
                                     }
@@ -222,13 +273,15 @@ fun LoginScreen(navController: NavHostController) {
 fun RegisterScreen(navController: NavHostController) {
     var gmail by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
-    var imageUri by remember { mutableStateOf<String?>(null) }
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
     var gmailError by remember { mutableStateOf<String?>(null) }
-    var passwordError by remember { mutableStateOf<String?>(null) }
+    var usernameError by remember { mutableStateOf<String?>(null) }
     var phoneError by remember { mutableStateOf<String?>(null) }
-
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var confirmPasswordError by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
@@ -237,13 +290,12 @@ fun RegisterScreen(navController: NavHostController) {
         return gmailRegex.matches(gmail)
     }
 
-    fun isValidPassword(password: String): Boolean {
-        val passwordRegex = Regex("^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,}$")
-        return passwordRegex.matches(password)
-    }
-
     fun isValidPhone(phone: String): Boolean {
         return phone.matches(Regex("^\\d{10}$"))
+    }
+
+    fun isValidPassword(password: String): Boolean {
+        return password.length >= 8 && password.any { it.isDigit() } && password.any { it.isLetter() }
     }
 
     Scaffold(
@@ -254,16 +306,8 @@ fun RegisterScreen(navController: NavHostController) {
             ) { data ->
                 Snackbar(
                     snackbarData = data,
-                    containerColor = if (data.visuals.message.contains("Error")) {
-                        MaterialTheme.colorScheme.errorContainer
-                    } else {
-                        MaterialTheme.colorScheme.primaryContainer
-                    },
-                    contentColor = if (data.visuals.message.contains("Error")) {
-                        MaterialTheme.colorScheme.onErrorContainer
-                    } else {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    }
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
         }
@@ -277,7 +321,7 @@ fun RegisterScreen(navController: NavHostController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Registro de Usuario",
+                text = "Crear Cuenta",
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(bottom = 32.dp)
             )
@@ -285,8 +329,10 @@ fun RegisterScreen(navController: NavHostController) {
             OutlinedTextField(
                 value = gmail,
                 onValueChange = {
-                    gmail = it
-                    gmailError = if (it.isEmpty()) "El campo es obligatorio" else if (!isValidGmail(it)) "Debe terminar en @gmail.com" else null
+                    // Eliminamos comillas y espacios al inicio y final
+                    val cleanedInput = it.trim().trim('"')
+                    gmail = cleanedInput
+                    gmailError = if (cleanedInput.isEmpty()) "El campo es obligatorio" else if (!isValidGmail(cleanedInput)) "Debe terminar en @gmail.com" else null
                 },
                 label = { Text("Gmail") },
                 modifier = Modifier
@@ -294,42 +340,35 @@ fun RegisterScreen(navController: NavHostController) {
                     .padding(bottom = 8.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 isError = gmailError != null,
-                supportingText = { gmailError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+                supportingText = { gmailError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                enabled = !isLoading
             )
 
             OutlinedTextField(
                 value = username,
-                onValueChange = { username = it },
+                onValueChange = {
+                    // Eliminamos comillas y espacios al inicio y final
+                    val cleanedInput = it.trim().trim('"')
+                    username = cleanedInput
+                    usernameError = if (cleanedInput.isEmpty()) "El campo es obligatorio" else null
+                },
                 label = { Text("Nombre de Usuario") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-            )
-
-            OutlinedTextField(
-                value = password,
-                onValueChange = {
-                    password = it
-                    passwordError = if (it.isEmpty()) "El campo es obligatorio" else if (!isValidPassword(it)) {
-                        "Debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial"
-                    } else null
-                },
-                label = { Text("Contraseña") },
-                modifier = Modifier
-                    .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                isError = passwordError != null,
-                supportingText = { passwordError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+                isError = usernameError != null,
+                supportingText = { usernameError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                enabled = !isLoading
             )
 
             OutlinedTextField(
                 value = phone,
                 onValueChange = {
                     if (it.all { char -> char.isDigit() } && it.length <= 10) {
-                        phone = it
-                        phoneError = if (it.isEmpty()) "El campo es obligatorio" else if (!isValidPhone(it)) {
+                        // Eliminamos comillas y espacios al inicio y final
+                        val cleanedInput = it.trim().trim('"')
+                        phone = cleanedInput
+                        phoneError = if (cleanedInput.isEmpty()) "El campo es obligatorio" else if (!isValidPhone(cleanedInput)) {
                             "Debe tener exactamente 10 dígitos numéricos"
                         } else null
                     }
@@ -340,56 +379,88 @@ fun RegisterScreen(navController: NavHostController) {
                     .padding(bottom = 8.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 isError = phoneError != null,
-                supportingText = { phoneError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+                supportingText = { phoneError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                enabled = !isLoading
+            )
+
+            OutlinedTextField(
+                value = password,
+                onValueChange = {
+                    // Eliminamos comillas y espacios al inicio y final
+                    val cleanedInput = it.trim().trim('"')
+                    password = cleanedInput
+                    passwordError = if (cleanedInput.isEmpty()) "El campo es obligatorio" else if (!isValidPassword(cleanedInput)) {
+                        "Debe tener al menos 8 caracteres, con letras y números"
+                    } else null
+                },
+                label = { Text("Contraseña") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                isError = passwordError != null,
+                supportingText = { passwordError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                enabled = !isLoading
+            )
+
+            OutlinedTextField(
+                value = confirmPassword,
+                onValueChange = {
+                    // Eliminamos comillas y espacios al inicio y final
+                    val cleanedInput = it.trim().trim('"')
+                    confirmPassword = cleanedInput
+                    confirmPasswordError = if (cleanedInput.isEmpty()) "El campo es obligatorio" else if (cleanedInput != password) {
+                        "Las contraseñas no coinciden"
+                    } else null
+                },
+                label = { Text("Confirmar Contraseña") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                isError = confirmPasswordError != null,
+                supportingText = { confirmPasswordError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                enabled = !isLoading
             )
 
             Button(
                 onClick = {
-                    imageUri = "android.resource://com.example.psm_pia/drawable/sample_image"
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-            ) {
-                Text("Subir Foto")
-            }
-
-            imageUri?.let { uri ->
-                Text(
-                    text = "Imagen seleccionada: $uri",
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-            }
-
-            Button(
-                onClick = {
                     gmailError = if (gmail.isEmpty()) "El campo es obligatorio" else if (!isValidGmail(gmail)) "Debe terminar en @gmail.com" else null
-                    passwordError = if (password.isEmpty()) "El campo es obligatorio" else if (!isValidPassword(password)) {
-                        "Debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial"
-                    } else null
+                    usernameError = if (username.isEmpty()) "El campo es obligatorio" else null
                     phoneError = if (phone.isEmpty()) "El campo es obligatorio" else if (!isValidPhone(phone)) {
                         "Debe tener exactamente 10 dígitos numéricos"
                     } else null
+                    passwordError = if (password.isEmpty()) "El campo es obligatorio" else if (!isValidPassword(password)) {
+                        "Debe tener al menos 8 caracteres, con letras y números"
+                    } else null
+                    confirmPasswordError = if (confirmPassword.isEmpty()) "El campo es obligatorio" else if (confirmPassword != password) {
+                        "Las contraseñas no coinciden"
+                    } else null
 
-                    if (gmailError == null && passwordError == null && phoneError == null && username.isNotEmpty()) {
+                    if (gmailError == null && usernameError == null && phoneError == null && passwordError == null && confirmPasswordError == null) {
                         coroutineScope.launch {
+                            isLoading = true
                             try {
                                 val response = RetrofitClient.apiService.registerUser(
                                     gmail = gmail,
                                     nombreUsuario = username,
-                                    contrasena = password,
                                     telefono = phone,
-                                    imagen = imageUri
+                                    contrasena = password,
+                                    imagen = "https://example.com/default.jpg"
                                 )
                                 if (response.isSuccessful && response.body()?.success == true) {
                                     snackbarHostState.showSnackbar(
-                                        message = response.body()?.message ?: "Usuario registrado",
-                                        duration = SnackbarDuration.Short
+                                        message = "Usuario registrado exitosamente",
+                                        duration = SnackbarDuration.Long
                                     )
-                                    navController.popBackStack()
+                                    navController.navigate("login") {
+                                        popUpTo("register") { inclusive = true }
+                                    }
                                 } else {
                                     snackbarHostState.showSnackbar(
-                                        message = response.body()?.message ?: "Error desconocido",
+                                        message = response.body()?.message ?: "Error al registrar",
                                         duration = SnackbarDuration.Long
                                     )
                                 }
@@ -398,27 +469,30 @@ fun RegisterScreen(navController: NavHostController) {
                                     message = "Error de red: ${e.message}",
                                     duration = SnackbarDuration.Long
                                 )
+                            } finally {
+                                isLoading = false
                             }
-                        }
-                    } else {
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = "Por favor, corrige los errores en el formulario",
-                                duration = SnackbarDuration.Long
-                            )
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                enabled = !isLoading
             ) {
-                Text("Registrar")
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                } else {
+                    Text("Registrar")
+                }
             }
 
             OutlinedButton(
-                onClick = { navController.popBackStack() },
-                modifier = Modifier.fillMaxWidth()
+                onClick = { navController.navigate("login") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
             ) {
-                Text("Volver")
+                Text("Volver al Inicio de Sesión")
             }
         }
     }
@@ -429,7 +503,8 @@ fun DashboardScreen(
     navController: NavHostController,
     gmail: String,
     username: String,
-    phone: String
+    phone: String,
+    userId: Int // Agregamos el parámetro userId
 ) {
     Column(
         modifier = Modifier
@@ -469,7 +544,8 @@ fun DashboardScreen(
                 val encodedGmail = URLEncoder.encode(gmail, "UTF-8")
                 val encodedUsername = URLEncoder.encode(username, "UTF-8")
                 val encodedPhone = URLEncoder.encode(phone, "UTF-8")
-                navController.navigate("profile?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone")
+                // Pasamos el userId en la ruta
+                navController.navigate("profile?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone&id=$userId")
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -489,13 +565,14 @@ fun ProfileScreen(
     navController: NavHostController,
     gmail: String,
     username: String,
-    phone: String
+    phone: String,
+    userId: Int
 ) {
     var updatedGmail by remember { mutableStateOf(gmail) }
     var updatedUsername by remember { mutableStateOf(username) }
     var updatedPhone by remember { mutableStateOf(phone) }
     var showEditDialog by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) } // Nuevo estado para el diálogo de eliminación
+    var showDeleteDialog by remember { mutableStateOf(false) }
     var gmailError by remember { mutableStateOf<String?>(null) }
     var usernameError by remember { mutableStateOf<String?>(null) }
     var phoneError by remember { mutableStateOf<String?>(null) }
@@ -597,12 +674,9 @@ fun ProfileScreen(
                                         val encodedGmail = java.net.URLEncoder.encode(updatedGmail, "UTF-8")
                                         val encodedUsername = java.net.URLEncoder.encode(updatedUsername, "UTF-8")
                                         val encodedPhone = java.net.URLEncoder.encode(updatedPhone, "UTF-8")
-                                        navController.navigate("profile?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone") {
-                                            popUpTo(navController.graph.startDestinationId)
+                                        navController.navigate("profile?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone&id=$userId") {
+                                            popUpTo("profile") { inclusive = true }
                                             launchSingleTop = true
-                                        }
-                                        navController.navigate("dashboard?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone") {
-                                            popUpTo("dashboard") { inclusive = true }
                                         }
                                     } else {
                                         snackbarHostState.showSnackbar(
@@ -655,8 +729,6 @@ fun ProfileScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        // Aquí podrías agregar una solicitud al servidor para verificar la contraseña antes de eliminar
-                        // Por ahora, solo verificamos que no esté vacía
                         passwordError = if (passwordConfirmation.isEmpty()) "Ingresa tu contraseña" else null
                         if (passwordError == null) {
                             coroutineScope.launch {
@@ -750,7 +822,7 @@ fun ProfileScreen(
                 Button(onClick = { /* Lógica para favoritos */ }) {
                     Text("Favoritos")
                 }
-                Button(onClick = { navController.navigate("add_recipe") }) {
+                Button(onClick = { navController.navigate("add_recipe/$userId") }) { // Pasamos el userId en la ruta
                     Text("Crear Receta")
                 }
             }
@@ -784,7 +856,6 @@ fun ProfileScreen(
                 Text("Editar Perfil")
             }
 
-            // Botón para eliminar cuenta
             Button(
                 onClick = { showDeleteDialog = true },
                 modifier = Modifier
@@ -820,11 +891,12 @@ fun RegisterPreview() {
 @Composable
 fun DashboardPreview() {
     PSM_PIATheme {
-        ProfileScreen(
+        DashboardScreen(
             navController = rememberNavController(),
             gmail = "test@gmail.com",
             username = "UsuarioEjemplo",
-            phone = "1234567890"
+            phone = "1234567890",
+            userId = 1
         )
     }
 }
@@ -837,182 +909,323 @@ fun ProfilePreview() {
             navController = rememberNavController(),
             gmail = "test@gmail.com",
             username = "UsuarioEjemplo",
-            phone = "1234567890"
+            phone = "1234567890",
+            userId = 1
         )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddRecipeScreen(navController: NavHostController) {
-    var dishName by remember { mutableStateOf("") }
-    var country by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var photoUri by remember { mutableStateOf<String?>(null) }
+fun AddRecipeScreen(navController: NavHostController, userId: Int) {
+    var nombreReceta by remember { mutableStateOf("") }
+    var ingredientes by remember { mutableStateOf("") }
+    var instrucciones by remember { mutableStateOf("") }
+    var paisOrigen by remember { mutableStateOf("") }
+    var dificultad by remember { mutableStateOf("Principiante") }
+    var tipoPlatillo by remember { mutableStateOf("Almuerzo") }
+    var cantidadPersonas by remember { mutableStateOf("Individual") }
+    var nombreError by remember { mutableStateOf<String?>(null) }
+    var ingredientesError by remember { mutableStateOf<String?>(null) }
+    var instruccionesError by remember { mutableStateOf<String?>(null) }
+    var paisOrigenError by remember { mutableStateOf<String?>(null) }
+    var expandedDificultad by remember { mutableStateOf(false) }
+    var expandedTipoPlatillo by remember { mutableStateOf(false) }
+    var expandedCantidadPersonas by remember { mutableStateOf(false) }
 
-    // Estado para el dropdown de dificultad
-    var difficulty by remember { mutableStateOf("Principiante") }
-    val difficultyOptions = listOf("Principiante", "Intermedio", "Avanzado")
-    var expandedDifficulty by remember { mutableStateOf(false) }
+    val dificultades = listOf("Principiante", "Intermedio", "Avanzado")
+    val tiposPlatillo = listOf("Almuerzo", "Comida", "Cena", "Merienda")
+    val cantidadesPersonas = listOf("Individual", "Dúo", "Grupal")
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
-    // Estado para el dropdown de tipo de platillo
-    var dishType by remember { mutableStateOf("Almuerzo") }
-    val dishTypeOptions = listOf("Almuerzo", "Comida", "Cena", "Merienda")
-    var expandedDishType by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Agregar Nueva Receta",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-
-        // Campo: Nombre del platillo
-        OutlinedTextField(
-            value = dishName,
-            onValueChange = { dishName = it },
-            label = { Text("Nombre del Platillo") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        )
-
-        // Campo: País de origen
-        OutlinedTextField(
-            value = country,
-            onValueChange = { country = it },
-            label = { Text("País de Origen") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        )
-
-        // Dropdown: Dificultad
-        ExposedDropdownMenuBox(
-            expanded = expandedDifficulty,
-            onExpandedChange = { expandedDifficulty = !expandedDifficulty }
-        ) {
-            OutlinedTextField(
-                value = difficulty,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Dificultad") },
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDifficulty)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-                    .menuAnchor()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedDifficulty,
-                onDismissRequest = { expandedDifficulty = false }
-            ) {
-                difficultyOptions.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option) },
-                        onClick = {
-                            difficulty = option
-                            expandedDifficulty = false
-                        }
-                    )
-                }
+    // Texto descriptivo para cantidad de personas
+    val cantidadPersonasTexto by remember(cantidadPersonas) {
+        derivedStateOf {
+            when (cantidadPersonas) {
+                "Individual" -> "Platillo para 1 persona"
+                "Dúo" -> "Platillo para 2 personas"
+                "Grupal" -> "Platillo para 3 a 6 personas"
+                else -> ""
             }
         }
+    }
 
-        // Dropdown: Tipo de platillo
-        ExposedDropdownMenuBox(
-            expanded = expandedDishType,
-            onExpandedChange = { expandedDishType = !expandedDishType }
-        ) {
-            OutlinedTextField(
-                value = dishType,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Tipo de Platillo") },
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDishType)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-                    .menuAnchor()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedDishType,
-                onDismissRequest = { expandedDishType = false }
-            ) {
-                dishTypeOptions.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option) },
-                        onClick = {
-                            dishType = option
-                            expandedDishType = false
-                        }
-                    )
-                }
+    Scaffold(
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(16.dp)
+            ) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (data.visuals.message.contains("Error")) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.primaryContainer
+                    },
+                    contentColor = if (data.visuals.message.contains("Error")) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    }
+                )
             }
         }
-
-        // Campo: Descripción
-        OutlinedTextField(
-            value = description,
-            onValueChange = { description = it },
-            label = { Text("Descripción") },
+    ) { paddingValues ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-                .height(120.dp),
-            maxLines = 5
-        )
-
-        // Botón: Subir foto
-        Button(
-            onClick = {
-                photoUri = "android.resource://com.example.psm_pia/drawable/sample_recipe_image"
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Subir Foto del Platillo")
-        }
-
-        // Mostrar URI de la foto (si existe)
-        photoUri?.let { uri ->
             Text(
-                text = "Foto seleccionada: $uri",
-                modifier = Modifier.padding(bottom = 16.dp)
+                text = "Agregar Receta",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(bottom = 32.dp)
             )
-        }
 
-        // Botón: Guardar receta
-        Button(
-            onClick = {
-                // Aquí puedes agregar lógica para guardar la receta (por ejemplo, en una base de datos)
-                // Por ahora, solo regresa a la pantalla anterior
-                navController.popBackStack()
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        ) {
-            Text("Guardar Receta")
-        }
+            OutlinedTextField(
+                value = nombreReceta,
+                onValueChange = {
+                    nombreReceta = it
+                    nombreError = if (it.isEmpty()) "El campo es obligatorio" else null
+                },
+                label = { Text("Nombre del Platillo") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                isError = nombreError != null,
+                supportingText = { nombreError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+            )
 
-        // Botón: Volver
-        OutlinedButton(
-            onClick = { navController.popBackStack() },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Volver")
+            OutlinedTextField(
+                value = paisOrigen,
+                onValueChange = {
+                    paisOrigen = it
+                    paisOrigenError = if (it.isEmpty()) "El campo es obligatorio" else null
+                },
+                label = { Text("País de Origen") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                isError = paisOrigenError != null,
+                supportingText = { paisOrigenError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+            )
+
+            OutlinedTextField(
+                value = ingredientes,
+                onValueChange = {
+                    ingredientes = it
+                    ingredientesError = if (it.isEmpty()) "El campo es obligatorio" else null
+                },
+                label = { Text("Ingredientes") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                isError = ingredientesError != null,
+                supportingText = { ingredientesError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+            )
+
+            OutlinedTextField(
+                value = instrucciones,
+                onValueChange = {
+                    instrucciones = it
+                    instruccionesError = if (it.isEmpty()) "El campo es obligatorio" else null
+                },
+                label = { Text("Instrucciones") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                isError = instruccionesError != null,
+                supportingText = { instruccionesError?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+            )
+
+            // Selector de dificultad
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            ) {
+                OutlinedTextField(
+                    value = dificultad,
+                    onValueChange = {},
+                    label = { Text("Dificultad") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    trailingIcon = {
+                        IconButton(onClick = { expandedDificultad = !expandedDificultad }) {
+                            Icon(
+                                imageVector = if (expandedDificultad) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                contentDescription = "Expandir"
+                            )
+                        }
+                    }
+                )
+                DropdownMenu(
+                    expanded = expandedDificultad,
+                    onDismissRequest = { expandedDificultad = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    dificultades.forEach { nivel ->
+                        DropdownMenuItem(
+                            text = { Text(nivel) },
+                            onClick = {
+                                dificultad = nivel
+                                expandedDificultad = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Selector de tipo de platillo
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            ) {
+                OutlinedTextField(
+                    value = tipoPlatillo,
+                    onValueChange = {},
+                    label = { Text("Tipo de Platillo") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    trailingIcon = {
+                        IconButton(onClick = { expandedTipoPlatillo = !expandedTipoPlatillo }) {
+                            Icon(
+                                imageVector = if (expandedTipoPlatillo) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                contentDescription = "Expandir"
+                            )
+                        }
+                    }
+                )
+                DropdownMenu(
+                    expanded = expandedTipoPlatillo,
+                    onDismissRequest = { expandedTipoPlatillo = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    tiposPlatillo.forEach { tipo ->
+                        DropdownMenuItem(
+                            text = { Text(tipo) },
+                            onClick = {
+                                tipoPlatillo = tipo
+                                expandedTipoPlatillo = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Selector de cantidad de personas
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp)
+            ) {
+                OutlinedTextField(
+                    value = cantidadPersonas,
+                    onValueChange = {},
+                    label = { Text("Cantidad de Personas") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    trailingIcon = {
+                        IconButton(onClick = { expandedCantidadPersonas = !expandedCantidadPersonas }) {
+                            Icon(
+                                imageVector = if (expandedCantidadPersonas) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                contentDescription = "Expandir"
+                            )
+                        }
+                    }
+                )
+                DropdownMenu(
+                    expanded = expandedCantidadPersonas,
+                    onDismissRequest = { expandedCantidadPersonas = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    cantidadesPersonas.forEach { cantidad ->
+                        DropdownMenuItem(
+                            text = { Text(cantidad) },
+                            onClick = {
+                                cantidadPersonas = cantidad
+                                expandedCantidadPersonas = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Texto descriptivo para cantidad de personas
+            Text(
+                text = cantidadPersonasTexto,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Button(
+                onClick = {
+                    nombreError = if (nombreReceta.isEmpty()) "El campo es obligatorio" else null
+                    paisOrigenError = if (paisOrigen.isEmpty()) "El campo es obligatorio" else null
+                    ingredientesError = if (ingredientes.isEmpty()) "El campo es obligatorio" else null
+                    instruccionesError = if (instrucciones.isEmpty()) "El campo es obligatorio" else null
+
+                    if (nombreError == null && paisOrigenError == null && ingredientesError == null && instruccionesError == null) {
+                        coroutineScope.launch {
+                            try {
+                                val response = RetrofitClient.apiService.addRecipe(
+                                    idUsuario = userId,
+                                    nombreReceta = nombreReceta,
+                                    ingredientes = ingredientes,
+                                    instrucciones = instrucciones,
+                                    paisOrigen = paisOrigen,
+                                    dificultad = dificultad,
+                                    tipoPlatillo = tipoPlatillo,
+                                    cantidadPersonas = cantidadPersonas
+                                )
+                                if (response.isSuccessful && response.body()?.success == true) {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Receta agregada correctamente",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    navController.popBackStack()
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        message = response.body()?.message ?: "Error al agregar la receta",
+                                        duration = SnackbarDuration.Long
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar(
+                                    message = "Error de red: ${e.message}",
+                                    duration = SnackbarDuration.Long
+                                )
+                            }
+                        }
+                    } else {
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "Por favor, corrige los errores en el formulario",
+                                duration = SnackbarDuration.Long
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Agregar Receta")
+            }
+
+            OutlinedButton(
+                onClick = { navController.popBackStack() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Volver")
+            }
         }
     }
 }

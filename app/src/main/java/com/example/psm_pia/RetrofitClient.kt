@@ -4,7 +4,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
-    private const val BASE_URL = "http://10.0.2.2/APIS_PSM/" // Para emulador; usa tu URL real en producción
+    private const val BASE_URL = "http://147.185.221.28:50986/APIS_PSM/" // Para emulador; usa tu URL real en producción
 
     val apiService: ApiService by lazy {
         Retrofit.Builder()

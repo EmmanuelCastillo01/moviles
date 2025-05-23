@@ -49,4 +49,9 @@ interface ApiService {
         @Field("tipo_platillo") tipoPlatillo: String,
         @Field("cantidad_personas") cantidadPersonas: String
     ): Response<ApiResponse>
+
+    @GET("obtener_recetas.php")
+    suspend fun getRecipes(
+        @Query("id_usuario") idUsuario: Int
+    ): Response<RecetasResponse>
 }

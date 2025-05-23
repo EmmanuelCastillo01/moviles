@@ -3,8 +3,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,13 +24,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import kotlinx.coroutines.launch
-import retrofit2.Response
 import com.example.psm_pia.ui.theme.PSM_PIATheme
+import kotlinx.coroutines.launch
 import java.net.URLEncoder
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -504,59 +508,145 @@ fun DashboardScreen(
     gmail: String,
     username: String,
     phone: String,
-    userId: Int // Agregamos el parámetro userId
+    userId: Int
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Kitchen Lab",
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier
-                .padding(vertical = 16.dp)
-                .align(Alignment.CenterHorizontally)
-        )
+    var recetas by remember { mutableStateOf<List<Receta>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
-        Button(
-            onClick = { navController.navigate("login") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        ) {
-            Text("Salir")
+    // Cargar recetas al iniciar la pantalla
+    LaunchedEffect(Unit) {
+        coroutineScope.launch {
+            try {
+                val response = RetrofitClient.apiService.getRecipes(userId)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    recetas = response.body()?.recetas ?: emptyList()
+                } else {
+                    errorMessage = response.body()?.message ?: "Error al cargar recetas"
+                    snackbarHostState.showSnackbar(errorMessage ?: "Error desconocido")
+                }
+            } catch (e: Exception) {
+                errorMessage = "Error de red: ${e.message}"
+                snackbarHostState.showSnackbar(errorMessage ?: "Error de red")
+            } finally {
+                isLoading = false
+            }
         }
+    }
 
-        Button(
-            onClick = { /* Lógica para buscar recetas */ },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        ) {
-            Text("Buscar")
+    Scaffold(
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(16.dp)
+            ) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
         }
-
-        Button(
-            onClick = {
-                val encodedGmail = URLEncoder.encode(gmail, "UTF-8")
-                val encodedUsername = URLEncoder.encode(username, "UTF-8")
-                val encodedPhone = URLEncoder.encode(phone, "UTF-8")
-                // Pasamos el userId en la ruta
-                navController.navigate("profile?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone&id=$userId")
-            },
+    ) { paddingValues ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Top,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Perfil")
-        }
+            Text(
+                text = "Kitchen Lab",
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier
+                    .padding(vertical = 16.dp)
+                    .align(Alignment.CenterHorizontally)
+            )
 
-        Text(
-            text = "Aquí se mostrarán las recetas (futuro desarrollo)",
-            modifier = Modifier.padding(top = 16.dp)
-        )
+            Button(
+                onClick = { navController.navigate("login") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            ) {
+                Text("Salir")
+            }
+
+            Button(
+                onClick = { /* Lógica para buscar recetas*/ },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            ) {
+                Text("Buscar")
+            }
+
+            Button(
+                onClick = {
+                    val encodedGmail = URLEncoder.encode(gmail, "UTF-8")
+                    val encodedUsername = URLEncoder.encode(username, "UTF-8")
+                    val encodedPhone = URLEncoder.encode(phone, "UTF-8")
+                    navController.navigate("profile?gmail=$encodedGmail&username=$encodedUsername&phone=$encodedPhone&id=$userId")
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            ) {
+                Text("Perfil")
+            }
+
+            Button(
+                onClick = { navController.navigate("add_recipe/$userId") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Text("Crear Receta")
+            }
+
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
+            } else if (errorMessage != null) {
+                Text(
+                    text = errorMessage ?: "Error al cargar recetas",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            } else if (recetas.isEmpty()) {
+                Text(
+                    text = "No hay recetas disponibles",
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    items(recetas) { receta ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .border(1.dp, Color.Gray)
+                                .padding(8.dp)
+                        ) {
+                            Text(text = "Nombre: ${receta.nombreReceta}")
+                            Text(text = "Ingredientes: ${receta.ingredientes}")
+                            Text(text = "Instrucciones: ${receta.instrucciones}")
+                            Text(text = "País: ${receta.paisOrigen}")
+                            Text(text = "Dificultad: ${receta.dificultad}")
+                            Text(text = "Tipo: ${receta.tipoPlatillo}")
+                            Text(text = "Personas: ${receta.cantidadPersonas}")
+                        }
+                    }
+                }
+
+            }
+        }
     }
 }
 

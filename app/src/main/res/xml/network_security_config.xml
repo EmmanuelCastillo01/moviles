@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">10.0.2.2</domain> <!-- Para emuladores Android -->
+        <domain includeSubdomains="true">147.185.221.28:50986/APIS_PSM/</domain> <!-- Para emuladores Android -->
     </domain-config>
+    <base-config cleartextTrafficPermitted="true"/>
 </network-security-config>
